@@ -37,16 +37,16 @@ fun MainScreen(vm: MainViewModel = koinViewModel()) {
     var rsaInput by remember { mutableStateOf(rsaState.value) }
     val portState = vm.port.collectAsState()
     var portInput by remember { mutableStateOf(portState.value.toString()) }
-    val endpoint by rememberUpdatedState(vm.endpoint)
+    val endpoint = vm.endpoint.collectAsState("")
 
-    LaunchedEffect(rsaState.value)  { rsaInput  = rsaState.value }
+    LaunchedEffect(rsaState.value) { rsaInput = rsaState.value }
     LaunchedEffect(portState.value) { portInput = portState.value.toString() }
 
     val ctx = LocalContext.current
     val clipboard = LocalClipboardManager.current
 
-    // Collect UI events
     LaunchedEffect(Unit) {
+        // Collect UI events
         vm.uiEvent.collect { event ->
             when (event) {
                 is UiEvent.ShowToast -> Toast.makeText(ctx, event.msg, Toast.LENGTH_LONG).show()
@@ -70,6 +70,10 @@ fun MainScreen(vm: MainViewModel = koinViewModel()) {
                     .fillMaxWidth()
                     .height(120.dp)
             )
+            Button(
+                onClick = { vm.saveRSAKey(rsaInput) },
+                modifier = Modifier.fillMaxWidth()
+            ) { Text("save RSA key") }
             OutlinedTextField(
                 value = portInput,
                 onValueChange = { portInput = it.filter { c -> c.isDigit() } },
@@ -79,15 +83,18 @@ fun MainScreen(vm: MainViewModel = koinViewModel()) {
             )
             Button(
                 onClick = {
-                    vm.save(rsaInput, portInput.toIntOrNull() ?: 5555)
+                    vm.savePort(portInput.toIntOrNull())
                 },
                 modifier = Modifier.fillMaxWidth()
-            ) { Text("Save") }
+            ) { Text("save port") }
+
             Button(
-                onClick = { vm.configure() },
-                modifier = Modifier.fillMaxWidth()
-            ) { Text("Configure & Start ADB") }
-            if (endpoint.isNotBlank()) Text("Current: $endpoint")
+                onClick = { vm.startAdb(portInput) },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 25.dp)
+            ) { Text("Start ADB") }
+            if (endpoint.value.isNotBlank()) Text("Current: ${endpoint.value}")
         }
     }
 }

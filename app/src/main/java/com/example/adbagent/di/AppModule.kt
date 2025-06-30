@@ -10,6 +10,6 @@ import org.koin.dsl.module
 
 val AppModule = module {
     single { DataStore(androidApplication()) }
-    single { ConfigureAdbUseCase(get(), androidContext()) }
-    viewModel { MainViewModel(repo = get(), configurator = get()) }
+    single { ConfigureAdbUseCase(get(), get()) }
+    viewModel { MainViewModel(get(), get()) }
 }

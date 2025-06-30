@@ -1,46 +1,75 @@
 package com.example.adbagent.presentation.ui.main
 
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.adbagent.data.datasource.local.datastore.DataStore
 import com.example.adbagent.domain.usecase.ConfigureAdbUseCase
 import com.example.adbagent.presentation.model.UiEvent
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.flow.MutableSharedFlow
-import kotlinx.coroutines.flow.SharedFlow
-import kotlinx.coroutines.flow.SharingStarted
-import kotlinx.coroutines.flow.asSharedFlow
-import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 
 class MainViewModel(
     private val repo: DataStore,
     private val configurator: ConfigureAdbUseCase
 ) : ViewModel() {
+
     val rsa = repo.rsa.stateIn(viewModelScope, SharingStarted.Eagerly, "")
     val port = repo.port.stateIn(viewModelScope, SharingStarted.Eagerly, 5555)
-    var endpoint by mutableStateOf("")
-        private set
+
+    private val wifiIp: StateFlow<String?> = configurator.wifiIpFlow()
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5_000),
+            initialValue = configurator.getWifiIp()
+        )
+
+
+    val endpoint: StateFlow<String> = combine(wifiIp, port) { ip, p ->
+        ip?.let { "$it:$p" } ?: "No Wi‑Fi IP"
+    }.stateIn(
+        scope = viewModelScope,
+        started = SharingStarted.WhileSubscribed(5_000),
+        initialValue = ""
+    )
+
 
     private val _uiEvent = MutableSharedFlow<UiEvent>()
     val uiEvent: SharedFlow<UiEvent> = _uiEvent.asSharedFlow()
 
-    fun save(rsa: String, port: Int) = viewModelScope.launch {
-        repo.saveRSA(rsa)
-        repo.savePort(port)
+    fun savePort(input: Int?) = viewModelScope.launch {
+        val p = input ?: return@launch _uiEvent.emit(UiEvent.ShowToast("Port cannot be empty"))
+        if (p !in 1..65_535) {
+            _uiEvent.emit(UiEvent.ShowToast("Port must be 1‑65535"))
+            return@launch
+        }
+        repo.savePort(p)
+        _uiEvent.emit(UiEvent.ShowToast("Port saved"))
     }
 
-    fun configure() = viewModelScope.launch {
-        configurator().onSuccess { ep ->
-            endpoint = ep
-            _uiEvent.emit(UiEvent.CopyText(ep))
-            delay(100)
-            _uiEvent.emit(UiEvent.ShowToast("ADB ready on $ep (copied)"))
-        }.onFailure { e ->
-            _uiEvent.emit(UiEvent.ShowToast(e.message ?: "error"))
+    fun saveRSAKey(key: String) = viewModelScope.launch {
+        if (key.isBlank()) {
+            _uiEvent.emit(UiEvent.ShowToast("RSA key cannot be empty"))
+            return@launch
+        }
+        // Persist first so that future launches pick it up even if root fails now
+        repo.saveRSA(key)
+        if (configurator.addKey(key)) {
+            _uiEvent.emit(UiEvent.ShowToast("RSA key saved"))
+        } else {
+            _uiEvent.emit(UiEvent.ShowToast("Root exec failed while adding key"))
         }
     }
+
+    fun startAdb(customPort: String? = null) = viewModelScope.launch {
+        val success = configurator.startAdb(customPort)
+        if (success) {
+            _uiEvent.emit(UiEvent.CopyText(endpoint.value))
+            delay(100)
+            _uiEvent.emit(UiEvent.ShowToast("ADB ready on ${endpoint.value} (copied)"))
+        } else {
+            _uiEvent.emit(UiEvent.ShowToast("Failed to start ADB"))
+        }
+    }
+
 }
