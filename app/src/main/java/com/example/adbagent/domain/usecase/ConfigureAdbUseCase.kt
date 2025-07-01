@@ -62,18 +62,26 @@ class ConfigureAdbUseCase(
 
         /* 1) مسیر روت: usb‑install + tcpip + ری‌استارت adbd */
         val rootCmd = listOf(
-            // ---------- Developer & ADB flags ----------
-            "settings put global development_settings_enabled 1",   // فعال کردن Developer Options
-            "settings put global adb_enabled 1",                    // USB debugging
-            "settings put global adb_wifi_enabled 1",               // برخی ROMها (Pixel / AOSP)
-            "settings put global install_via_usb 1",                // برخی MIUI / EMUI دستگاه‌ها
-            "settings put secure verify_apps_over_usb 0",           // جلوگیری از اسکن Play Protect حین نصب
+            // ---------- Developer & Debugging Flags ----------
+            "settings put global development_settings_enabled 1",      // Enable Developer options
+            "settings put global adb_enabled 1",                       // USB debugging
+            "settings put global adb_wifi_enabled 1",                  // Some AOSP/Pixel ROMs
+            "settings put global install_via_usb 1",                   // MIUI/EMUI prefer global
+            "settings put secure install_via_usb 1",                   // Some ROMs use secure namespace
+            "settings put secure verify_apps_over_usb 0",              // Disable Play‑Protect scan over USB
 
-            // ---------- Wi‑Fi ADB ----------
-            "setprop service.adb.tcp.port $port",                   // پورت جاری در RAM
-            "setprop persist.adb.tcp.port $port",                  // پورت پایدار بعد از ریبوت (ممکن است توسط vendor نادیده گرفته شود)
+            // ---------- Clear User Restrictions (Android 9+) ----------
+            // These blocks may silently fail on older APIs; that's fine.
+//            "cmd user clear-restriction 0 no_debugging_features",
+//            "cmd user clear-restriction 0 no_install_apps",
+//            "cmd user clear-restriction 0 no_install_unknown",
+//            "cmd user clear-restriction 0 no_usb_file_transfer",
 
-            // ---------- Restart ADB daemon ----------
+            // ---------- Wi‑Fi ADB (TCP) ----------
+            "setprop service.adb.tcp.port $port",                      // Immediate port in RAM
+            "setprop persist.adb.tcp.port $port",                     // Attempt to persist across reboots
+
+            // ---------- Restart the ADB daemon ----------
             "stop adbd",
             "start adbd"
         ).joinToString(" && ")
