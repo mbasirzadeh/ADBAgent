@@ -89,7 +89,7 @@ fun MainScreen(vm: MainViewModel = koinViewModel()) {
             ) { Text("save port") }
 
             Button(
-                onClick = { vm.startAdb(portInput) },
+                onClick = { vm.startAdb() },
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(top = 25.dp)

@@ -24,7 +24,6 @@ class MainViewModel(
             initialValue = configurator.getWifiIp()
         )
 
-
     val endpoint: StateFlow<String> = combine(wifiIp, port) { ip, p ->
         ip?.let { "$it:$p" } ?: "No Wi‑Fi IP"
     }.stateIn(
@@ -32,7 +31,6 @@ class MainViewModel(
         started = SharingStarted.WhileSubscribed(5_000),
         initialValue = ""
     )
-
 
     private val _uiEvent = MutableSharedFlow<UiEvent>()
     val uiEvent: SharedFlow<UiEvent> = _uiEvent.asSharedFlow()
@@ -54,15 +52,15 @@ class MainViewModel(
         }
         // Persist first so that future launches pick it up even if root fails now
         repo.saveRSA(key)
-        if (configurator.addKey(key)) {
+        if (configurator.addKeyIfPossible(key)) {
             _uiEvent.emit(UiEvent.ShowToast("RSA key saved"))
         } else {
-            _uiEvent.emit(UiEvent.ShowToast("Root exec failed while adding key"))
+            _uiEvent.emit(UiEvent.ShowToast("Cannot add RSA key (need root)"))
         }
     }
 
-    fun startAdb(customPort: String? = null) = viewModelScope.launch {
-        val success = configurator.startAdb(customPort)
+    fun startAdb() = viewModelScope.launch {
+        val success = configurator.startAdb()
         if (success) {
             _uiEvent.emit(UiEvent.CopyText(endpoint.value))
             delay(100)
