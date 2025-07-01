@@ -16,6 +16,7 @@ class MainViewModel(
 
     val rsa = repo.rsa.stateIn(viewModelScope, SharingStarted.Eagerly, "")
     val port = repo.port.stateIn(viewModelScope, SharingStarted.Eagerly, 5555)
+    val isADBEnable = configurator.adbEnabledFlow().stateIn(viewModelScope, SharingStarted.Eagerly,false)
 
     private val wifiIp: StateFlow<String?> = configurator.wifiIpFlow()
         .stateIn(

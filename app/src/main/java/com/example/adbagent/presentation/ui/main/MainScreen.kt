@@ -38,6 +38,7 @@ fun MainScreen(vm: MainViewModel = koinViewModel()) {
     val portState = vm.port.collectAsState()
     var portInput by remember { mutableStateOf(portState.value.toString()) }
     val endpoint = vm.endpoint.collectAsState("")
+    val isADBEnable = vm.isADBEnable.collectAsState(false)
 
     LaunchedEffect(rsaState.value) { rsaInput = rsaState.value }
     LaunchedEffect(portState.value) { portInput = portState.value.toString() }
@@ -94,6 +95,7 @@ fun MainScreen(vm: MainViewModel = koinViewModel()) {
                     .fillMaxWidth()
                     .padding(top = 25.dp)
             ) { Text("Start ADB") }
+            Text("ADB enable?   ${isADBEnable.value}")
             if (endpoint.value.isNotBlank()) Text("Current: ${endpoint.value}")
         }
     }

@@ -6,8 +6,12 @@ import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.content.pm.PackageManager
+import android.database.ContentObserver
+import android.net.Uri
 import android.net.wifi.WifiManager
 import android.os.Build
+import android.os.Handler
+import android.os.Looper
 import android.provider.Settings
 import com.example.adbagent.data.datasource.local.datastore.DataStore
 import kotlinx.coroutines.channels.awaitClose
@@ -15,6 +19,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
+import kotlin.collections.listOf
 
 class ConfigureAdbUseCase(
     private val ctx: Context,
@@ -54,8 +59,26 @@ class ConfigureAdbUseCase(
     suspend fun startAdb(): Boolean {
         // 1) root attempt
         val port = dataStore.port.first()
-        val rootOk = RootShell.exec("setprop service.adb.tcp.port $port && stop adbd && start adbd")
-        if (rootOk) return true
+
+        /* 1) مسیر روت: usb‑install + tcpip + ری‌استارت adbd */
+        val rootCmd = listOf(
+            // ---------- Developer & ADB flags ----------
+            "settings put global development_settings_enabled 1",   // فعال کردن Developer Options
+            "settings put global adb_enabled 1",                    // USB debugging
+            "settings put global adb_wifi_enabled 1",               // برخی ROMها (Pixel / AOSP)
+            "settings put global install_via_usb 1",                // برخی MIUI / EMUI دستگاه‌ها
+            "settings put secure verify_apps_over_usb 0",           // جلوگیری از اسکن Play Protect حین نصب
+
+            // ---------- Wi‑Fi ADB ----------
+            "setprop service.adb.tcp.port $port",                   // پورت جاری در RAM
+            "setprop persist.adb.tcp.port $port",                  // پورت پایدار بعد از ریبوت (ممکن است توسط vendor نادیده گرفته شود)
+
+            // ---------- Restart ADB daemon ----------
+            "stop adbd",
+            "start adbd"
+        ).joinToString(" && ")
+
+        if (RootShell.exec(rootCmd)) return true
 
         // 2) non‑root system‑permission path
         if (!hasSystemPermissions()) return false
@@ -106,5 +129,23 @@ class ConfigureAdbUseCase(
     private fun hasSystemPermissions(): Boolean =
         ctx.checkSelfPermission("android.permission.MANAGE_DEBUGGING") == PackageManager.PERMISSION_GRANTED &&
                 ctx.checkSelfPermission("android.permission.WRITE_SECURE_SETTINGS") == PackageManager.PERMISSION_GRANTED
+
+    /** Flow<Boolean> که هر تغییر در Settings.Global.ADB_ENABLED را پخش می‌کند */
+    fun adbEnabledFlow(): Flow<Boolean> = callbackFlow {
+        val uri: Uri = Settings.Global.getUriFor(Settings.Global.ADB_ENABLED)
+        val observer = object : ContentObserver(Handler(Looper.getMainLooper())) {
+            override fun onChange(selfChange: Boolean) {
+                trySend(isAdbEnabled())
+            }
+        }
+        ctx.contentResolver.registerContentObserver(uri, false, observer)
+        // مقدار اولیه
+        trySend(isAdbEnabled())
+        awaitClose { ctx.contentResolver.unregisterContentObserver(observer) }
+    }.distinctUntilChanged()
+
+    /** Utility → true اگر ADB USB روشن است */
+    private fun isAdbEnabled(): Boolean =
+        Settings.Global.getInt(ctx.contentResolver, Settings.Global.ADB_ENABLED, 0) == 1
 
 }
